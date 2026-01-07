@@ -1,0 +1,17 @@
+{
+    "name": "drupal/commerce_konnect",
+    "description": "Integrates the Konnect Tunisia payment gateway with Drupal Commerce.",
+    "type": "drupal-module",
+    "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "Fathi Ben Nasr",
+            "homepage": "https://www.drupal.org/u/fathibennasr"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "drupal/commerce_payment": "^2.0",
+        "drupal/commerce_order": "^2.0"
+    }
+}
