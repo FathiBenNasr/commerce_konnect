@@ -1,0 +1,9 @@
+name: 'Commerce Konnect'
+type: module
+description: 'Integrates Konnect Tunisia payment gateway with Drupal Commerce.'
+core_version_requirement: ^9.4 || ^10 || ^11
+package: Commerce (Tunisia)
+dependencies:
+  - commerce:commerce_payment
+  - commerce:commerce_order
+license: 'GPL-2.0-or-later'
