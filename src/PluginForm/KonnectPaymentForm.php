@@ -2,48 +2,83 @@
 
 namespace Drupal\commerce_konnect\PluginForm;
 
-use Drupal\commerce_payment\PluginForm\PaymentOffsiteForm as BasePaymentOffsiteForm;
+use Drupal\commerce_payment\PluginForm\PaymentOffsiteForm;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\commerce_payment\Exception\PaymentGatewayException;
+use Drupal\commerce_order\Entity\OrderInterface;
 
-class KonnectPaymentForm extends BasePaymentOffsiteForm {
+/**
+ * Provides the Konnect payment form.
+ */
+class KonnectPaymentForm extends PaymentOffsiteForm {
 
+  /**
+   * {@inheritdoc}
+   */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
     $form = parent::buildConfigurationForm($form, $form_state);
 
     /** @var \Drupal\commerce_payment\Entity\PaymentInterface $payment */
     $payment = $this->entity;
-    $gateway_plugin = $payment->getPaymentGateway()->getPlugin();
-    $config = $gateway_plugin->getConfiguration();
+    /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
+    $order = $payment->getOrder();
+    /** @var \Drupal\commerce_konnect\Plugin\Commerce\PaymentGateway\Konnect $payment_gateway_plugin */
+    $payment_gateway_plugin = $payment->getPaymentGateway()->getPlugin();
+    $config = $payment_gateway_plugin->getConfiguration();
 
-    $url = ($gateway_plugin->getMode() == 'test')
-      ? 'https://api.preprod.konnect.network/api/v2/payments/init-payment'
-      : 'https://api.konnect.network/api/v2/payments/init-payment';
+    // Get billing profile to extract customer name.
+    $billing_profile = $order->getBillingProfile();
+    $address = $billing_profile ? $billing_profile->get('address')->first() : NULL;
 
-    // Amount in Millimes
-    $amount = (int) ($payment->getAmount()->getNumber() * 1000);
+    // Prepare the data for the Konnect API to create a payment.
+    $data = [
+      'receiverWalletId' => $config['receiver_wallet_id'],
+      'amount' => $payment->getAmount()->getMinorUnits(),
+      'currency' => $payment->getAmount()->getCurrencyCode(),
+      'description' => $this->t('Payment for Order #@order_id', ['@order_id' => $order->id()]),
+      'acceptedPaymentMethods' => [
+        'balance',
+        'bank_card',
+        'wallet',
+      ],
+      'sendEmail' => !empty($config['send_email']),
+      'email' => $order->getEmail(),
+      'firstName' => $address ? $address->getGivenName() : '',
+      'lastName' => $address ? $address->getFamilyName() : '',
+      'orderId' => $order->id(),
+      'successUrl' => $form['#return_url'],
+      'failUrl' => $form['#cancel_url'],
+    ];
+
+    // Add webhook URL if configured.
+    if (!empty($config['webhook_url'])) {
+      $data['webhookUrl'] = $config['webhook_url'];
+    }
 
     try {
-      $response = \Drupal::httpClient()->post($url, [
-        'headers' => [
-          'x-api-key' => $config['api_key'],
-          'Content-Type' => 'application/json',
-        ],
-        'json' => [
-          'receiverWalletId' => $config['wallet_id'],
-          'amount' => $amount,
-          'token' => 'TND',
-          'orderId' => $payment->getOrderId(),
-          'successUrl' => $form['#return_url'],
-          'failUrl' => $form['#cancel_url'],
-          'silentWebhook' => TRUE,
-        ],
-      ]);
-
-      $data = json_decode($response->getBody()->getContents(), TRUE);
-      return $this->buildRedirectForm($form, $form_state, $data['payUrl'], [], 'get');
-    } catch (\Exception $e) {
-      \Drupal::messenger()->addError('Payment initiation failed.');
-      return $form;
+      // Call the public apiCall method from the gateway plugin.
+      $response = $payment_gateway_plugin->apiCall('POST', '/payments', $data);
     }
+    catch (\Exception $e) {
+      // Log the detailed error for administrators.
+      \Drupal::logger('commerce_konnect')->error('Konnect payment initiation failed for order @order_id: @message', [
+        '@order_id' => $order->id(),
+        '@message' => $e->getMessage(),
+      ]);
+      throw new PaymentGatewayException('Could not initialize the payment with Konnect. Please try again or contact support.');
+    }
+
+    if (empty($response['payment_url'])) {
+      \Drupal::logger('commerce_konnect')->error('Konnect API response for order @order_id did not contain a payment_url. Response: @response', [
+        '@order_id' => $order->id(),
+        '@response' => print_r($response, TRUE),
+      ]);
+      throw new PaymentGatewayException('Could not retrieve payment URL from Konnect.');
+    }
+
+    // Redirect the user to the Konnect payment page.
+    $redirect_url = $response['payment_url'];
+    return $this->buildRedirectForm($form, $form_state, $redirect_url, []);
   }
+
 }
