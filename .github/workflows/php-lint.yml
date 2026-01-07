@@ -1,0 +1,19 @@
+name: PHP Syntax Check (Lint)
+
+on: [push, pull_request]
+
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1' # Matches Drupal 10/11 requirements
+
+      - name: Check PHP Syntax
+        run: |
+          find . -name "*.php" -o -name "*.module" -o -name "*.inc" | xargs -n 1 php -l
