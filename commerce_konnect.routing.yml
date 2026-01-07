@@ -1,0 +1,8 @@
+commerce_konnect.webhook:
+  path: '/payment/notify/konnect'
+  defaults:
+    _entity_type: 'commerce_payment_gateway'
+    _entity_view: 'konnect'
+    _controller: '\Drupal\commerce_payment\Controller\PaymentGatewayController::notifyPage'
+  requirements:
+    _permission: 'access content'

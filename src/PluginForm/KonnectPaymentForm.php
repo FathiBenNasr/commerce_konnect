@@ -29,6 +29,9 @@ class KonnectPaymentForm extends PaymentOffsiteForm {
     // Get billing profile to extract customer name.
     $billing_profile = $order->getBillingProfile();
     $address = $billing_profile ? $billing_profile->get('address')->first() : NULL;
+	// Extracting customer name with fallbacks
+	$first_name = $address ? $address->getGivenName() : $order->getCustomer()->getDisplayName();
+	$last_name = $address ? $address->getFamilyName() : '';
 
     // Prepare the data for the Konnect API to create a payment.
     $data = [
@@ -43,8 +46,8 @@ class KonnectPaymentForm extends PaymentOffsiteForm {
       ],
       'sendEmail' => !empty($config['send_email']),
       'email' => $order->getEmail(),
-      'firstName' => $address ? $address->getGivenName() : '',
-      'lastName' => $address ? $address->getFamilyName() : '',
+      'firstName' => $first_name ?: 'Customer',
+      'lastName' => $last_name ?: $order->id(),
       'orderId' => $order->id(),
       'successUrl' => $form['#return_url'],
       'failUrl' => $form['#cancel_url'],

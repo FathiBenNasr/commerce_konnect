@@ -9,9 +9,14 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 use GuzzleHttp\Exception\RequestException;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\commerce_order\Entity\OrderInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\commerce_payment\PaymentTypeManagerInterface;
+use Drupal\commerce_payment\PaymentMethodTypeManagerInterface;
+use GuzzleHttp\ClientInterface;
 
 /**
  * Provides the Konnect payment gateway.
@@ -47,9 +52,27 @@ class Konnect extends OffsitePaymentGatewayBase {
 
   /**
    * Constructs a new Konnect object.
+   *
+   * @param array $configuration
+   *   A configuration array containing information about the plugin instance.
+   * @param string $plugin_id
+   *   The plugin_id for the plugin instance.
+   * @param mixed $plugin_definition
+   *   The plugin implementation definition.
+   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
+   *   The entity type manager.
+   * @param \Drupal\commerce_payment\PaymentTypeManagerInterface $payment_type_manager
+   *   The payment type manager.
+   * @param \Drupal\commerce_payment\PaymentMethodTypeManagerInterface $payment_method_type_manager
+   *   The payment method type manager.
+   * @param \Drupal\Core\Logger\LoggerChannelFactoryInterface $logger_factory
+   *   The logger factory.
+   * @param \GuzzleHttp\ClientInterface $http_client
+   *   The HTTP client.
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, $http_client, LoggerChannelFactoryInterface $logger_factory) {
-    parent::__construct($configuration, $plugin_id, $plugin_definition);
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, EntityTypeManagerInterface $entity_type_manager, PaymentTypeManagerInterface $payment_type_manager, PaymentMethodTypeManagerInterface $payment_method_type_manager, LoggerChannelFactoryInterface $logger_factory, ClientInterface $http_client) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition, $entity_type_manager, $payment_type_manager, $payment_method_type_manager, $logger_factory);
+
     $this->httpClient = $http_client;
     $this->logger = $logger_factory->get('commerce_konnect');
   }
@@ -62,8 +85,11 @@ class Konnect extends OffsitePaymentGatewayBase {
       $configuration,
       $plugin_id,
       $plugin_definition,
-      $container->get('http_client'),
-      $container->get('logger.factory')
+      $container->get('entity_type.manager'),
+      $container->get('plugin.manager.commerce_payment_type'),
+      $container->get('plugin.manager.commerce_payment_method_type'),
+      $container->get('logger.factory'),
+      $container->get('http_client')
     );
   }
 
@@ -154,72 +180,149 @@ class Konnect extends OffsitePaymentGatewayBase {
   }
 
   /**
- * {@inheritdoc}
- */
-public function onReturn(OrderInterface $order, Request $request) {
-  $payment_id = $request->query->get('payment_id');
-  if (empty($payment_id)) {
-    $this->logger->error('Konnect return URL accessed without a payment_id for order @order_id.', ['@order_id' => $order->id()]);
-    throw new PaymentGatewayException('Payment confirmation failed: Payment ID not provided.');
-  }
+   * {@inheritdoc}
+   */
+  public function onReturn(OrderInterface $order, Request $request) {
+    $payment_id = $request->query->get('payment_id');
+    if (empty($payment_id)) {
+      $this->logger->error('Konnect return URL accessed without a payment_id for order @order_id.', ['@order_id' => $order->id()]);
+      throw new PaymentGatewayException('Payment confirmation failed: Payment ID not provided.');
+    }
 
-  try {
-    $response = $this->apiCall('GET', '/payments/' . $payment_id);
-  }
-  catch (RequestException $e) {
-    $this->logger->error('Konnect API request failed for order @order_id: @message', [
-      '@order_id' => $order->id(),
-      '@message' => $e->getMessage(),
-    ]);
-    throw new PaymentGatewayException('Payment confirmation failed: Could not connect to the payment provider.');
-  }
-
-  // *** CRITICAL SECURITY FIX: Prevent ID switching attacks ***
-  // Verify that the payment returned from Konnect actually belongs to the current order.
-  if (empty($response['orderId']) || (int) $response['orderId'] !== (int) $order->id()) {
-    $this->logger->warning('Potential ID switching attack detected for order @order_id. Konnect payment ID @payment_id is associated with a different order ID (@konnect_order_id).', [
-      '@order_id' => $order->id(),
-      '@payment_id' => $payment_id,
-      '@konnect_order_id' => $response['orderId'] ?? 'NULL',
-    ]);
-    throw new PaymentGatewayException('Payment confirmation failed: Payment ID does not match this order.');
-  }
-
-  if ($response['status'] === 'CAPTURED') {
-    $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
-
-    // Prevent duplicate payments by checking for an existing payment with the same remote ID.
-    $existing_payments = $payment_storage->loadByProperties(['remote_id' => $response['id']]);
-
-    if (empty($existing_payments)) {
-      $payment = $payment_storage->create([
-        'state' => 'completed',
-        'amount' => $order->getTotalPrice(),
-        'payment_gateway' => $this->entityId,
-        'order_id' => $order->id(),
-        'remote_id' => $response['id'],
-        'remote_state' => $response['status'],
-      ]);
-      $payment->save();
-      $this->logger->notice('Konnect payment created for order @order_id with remote ID @remote_id.', [
+    try {
+      $response = $this->apiCall('GET', '/payments/' . $payment_id);
+    }
+    catch (RequestException $e) {
+      $this->logger->error('Konnect API request failed for order @order_id: @message', [
         '@order_id' => $order->id(),
-        '@remote_id' => $response['id'],
+        '@message' => $e->getMessage(),
       ]);
+      throw new PaymentGatewayException('Payment confirmation failed: Could not connect to the payment provider.');
+    }
+
+    // *** CRITICAL SECURITY FIX: Prevent ID switching attacks ***
+    // Verify that the payment returned from Konnect actually belongs to the current order.
+    if (empty($response['orderId']) || (int) $response['orderId'] !== (int) $order->id()) {
+      $this->logger->warning('Potential ID switching attack detected for order @order_id. Konnect payment ID @payment_id is associated with a different order ID (@konnect_order_id).', [
+        '@order_id' => $order->id(),
+        '@payment_id' => $payment_id,
+        '@konnect_order_id' => $response['orderId'] ?? 'NULL',
+      ]);
+      throw new PaymentGatewayException('Payment confirmation failed: Payment ID does not match this order.');
+    }
+
+    if ($response['status'] === 'CAPTURED') {
+      $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
+
+      // Prevent duplicate payments by checking for an existing payment with the same remote ID.
+      $existing_payments = $payment_storage->loadByProperties(['remote_id' => $response['id']]);
+
+      if (empty($existing_payments)) {
+        $payment = $payment_storage->create([
+          'state' => 'completed',
+          'amount' => $order->getTotalPrice(),
+          'payment_gateway' => $this->entityId,
+          'order_id' => $order->id(),
+          'remote_id' => $response['id'],
+          'remote_state' => $response['status'],
+        ]);
+        $payment->save();
+        $this->logger->notice('Konnect payment created for order @order_id with remote ID @remote_id.', [
+          '@order_id' => $order->id(),
+          '@remote_id' => $response['id'],
+        ]);
+      }
+      else {
+        $this->logger->info('Konnect return for order @order_id with remote ID @remote_id received, but payment already exists. No action taken.', [
+          '@order_id' => $order->id(),
+          '@remote_id' => $response['id'],
+        ]);
+      }
+
+      $this->messenger()->addStatus($this->t('Your payment was successful with Transaction ID: @transaction_id', ['@transaction_id' => $response['transaction_id'] ?? $response['id']]));
     }
     else {
-      $this->logger->info('Konnect return for order @order_id with remote ID @remote_id received, but payment already exists. No action taken.', [
-        '@order_id' => $order->id(),
-        '@remote_id' => $response['id'],
-      ]);
+      $this->logger->warning('Konnect payment for order @order_id failed with status: @status', ['@order_id' => $order->id(), '@status' => $response['status']]);
+      throw new PaymentGatewayException('Payment failed at the payment provider. Please try again or contact support.');
+    }
+  }
+
+  /**
+   * Processes a webhook notification from Konnect.
+   *
+   * This method is intended to be called by a controller handling the webhook route.
+   *
+   * @param \Symfony\Component\HttpFoundation\Request $request
+   *   The request object.
+   *
+   * @return \Symfony\Component\HttpFoundation\Response
+   *   The response object.
+   *
+   * @throws \Drupal\commerce_payment\Exception\PaymentGatewayException
+   */
+  public function onNotify(Request $request) {
+    // 1. Get the payment reference from the URL (?payment_ref=XYZ).
+    $payment_ref = $request->query->get('payment_ref');
+
+    if (!$payment_ref) {
+      $this->logger->error('Webhook received without a payment_ref.');
+      return new Response('No payment reference provided', 400);
     }
 
-    $this->messenger()->addStatus($this->t('Your payment was successful with Transaction ID: @transaction_id', ['@transaction_id' => $response['transaction_id'] ?? $response['id']]));
+    try {
+      // 2. Fetch the latest status from Konnect API to be safe.
+      $payment_details = $this->apiCall('GET', "/payments/{$payment_ref}");
+
+      // The API returns { "payment": { "status": "completed", "orderId": "123", ... } }
+      if (empty($payment_details['payment'])) {
+        throw new \Exception('Invalid payment details received from Konnect API.');
+      }
+      $konnect_payment = $payment_details['payment'];
+      $order_id = $konnect_payment['orderId'];
+      $remote_status = $konnect_payment['status'];
+
+      // 3. Load the order using the injected entity type manager.
+      $order_storage = $this->entityTypeManager->getStorage('commerce_order');
+      /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
+      $order = $order_storage->load($order_id);
+
+      if (!$order) {
+        throw new PaymentGatewayException("Order $order_id not found.");
+      }
+
+      // 4. Update the payment in Drupal.
+      if ($remote_status === 'completed') {
+        $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
+
+        // Check if payment already exists to avoid duplicates.
+        $payments = $payment_storage->loadByProperties(['remote_id' => $payment_ref]);
+        $payment = reset($payments);
+
+        if (!$payment) {
+          $payment = $payment_storage->create([
+            'state' => 'completed',
+            'amount' => $order->getTotalPrice(),
+            'payment_gateway' => $this->entityId,
+            'order_id' => $order->id(),
+            'remote_id' => $payment_ref,
+            'remote_state' => $remote_status,
+          ]);
+        }
+        else {
+          $payment->setState('completed');
+        }
+
+        $payment->save();
+        $this->logger->info('Order @id marked as paid via Webhook.', ['@id' => $order_id]);
+      }
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Webhook error: @message', ['@message' => $e->getMessage()]);
+      return new Response('Error processing webhook', 500);
+    }
+
+    return new Response('OK');
   }
-  else {
-    $this->logger->warning('Konnect payment for order @order_id failed with status: @status', ['@order_id' => $order->id(), '@status' => $response['status']]);
-    throw new PaymentGatewayException('Payment failed at the payment provider. Please try again or contact support.');
-  }
-}
 
   /**
    * Performs an API call to the Konnect gateway.
