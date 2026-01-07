@@ -31,3 +31,15 @@ This module implements the following security measures:
 
 ## License
 This project is licensed under the **GPL-2.0-or-later**.
+
+## Troubleshooting
+
+### ArgumentCountError / White Screen of Death
+If you see an error stating "Too few arguments to function... PaymentGatewayBase::__construct()", ensure you have updated the `Konnect.php` file to include all 8 required arguments in the constructor. This usually happens when moving from older versions of Drupal Commerce to Drupal 9.4+.
+
+### Webhook Not Working (404 Error)
+If your Webhook URL returns a 404 error, you must **clear the Drupal cache** to register the new route defined in `commerce_konnect.routing.yml`. Use `drush cr` or the "Clear all caches" button in the Performance settings.
+
+### Payments Not Captured
+- Ensure your **API Key** and **Wallet ID** match the environment (Sandbox vs. Live) selected in the gateway settings.
+- Check the **Drupal Watchdog logs** (/admin/reports/dblog) for entries labeled `commerce_konnect` to see detailed API error responses.
