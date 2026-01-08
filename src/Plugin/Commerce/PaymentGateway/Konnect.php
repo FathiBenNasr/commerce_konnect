@@ -122,6 +122,117 @@ class Konnect extends OffsitePaymentGatewayBase {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  public function onReturn(OrderInterface $order, Request $request) {
+    $payment_id = $request->query->get('payment_id');
+    if (empty($payment_id)) {
+      $this->logger->error('Konnect return URL accessed without a payment_id for order @order_id.', ['@order_id' => $order->id()]);
+      throw new PaymentGatewayException('Payment confirmation failed: Payment ID not provided.');
+    }
+
+    try {
+      $response = $this->apiCall('GET', '/payments/' . $payment_id);
+    }
+    catch (RequestException $e) {
+      $this->logger->error('Konnect API request failed for order @order_id: @message', [
+        '@order_id' => $order->id(),
+        '@message' => $e->getMessage(),
+      ]);
+      throw new PaymentGatewayException('Payment confirmation failed: Could not connect to the payment provider.');
+    }
+
+    if (empty($response['orderId']) || (int) $response['orderId'] !== (int) $order->id()) {
+      $this->logger->warning('Potential ID switching attack detected for order @order_id.', [
+        '@order_id' => $order->id(),
+        '@payment_id' => $payment_id,
+      ]);
+      throw new PaymentGatewayException('Payment confirmation failed: Payment ID does not match this order.');
+    }
+
+    if ($response['status'] === 'CAPTURED') {
+      $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
+      $existing_payments = $payment_storage->loadByProperties(['remote_id' => $response['id']]);
+
+      if (empty($existing_payments)) {
+        $payment = $payment_storage->create([
+          'state' => 'completed',
+          'amount' => $order->getTotalPrice(),
+          'payment_gateway' => $this->entityId,
+          'order_id' => $order->id(),
+          'remote_id' => $response['id'],
+          'remote_state' => $response['status'],
+        ]);
+        $payment->save();
+      }
+
+      $this->messenger()->addStatus($this->t('Your payment was successful with Transaction ID: @transaction_id', ['@transaction_id' => $response['transaction_id'] ?? $response['id']]));
+    }
+    else {
+      throw new PaymentGatewayException('Payment failed at the payment provider.');
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function onNotify(Request $request) {
+    $payment_ref = $request->query->get('payment_ref');
+
+    if (!$payment_ref) {
+      return new Response('No payment reference provided', 400);
+    }
+
+    try {
+      $payment_details = $this->apiCall('GET', "/payments/{$payment_ref}");
+      if (empty($payment_details['payment'])) {
+        throw new \Exception('Invalid payment details.');
+      }
+      
+      $konnect_payment = $payment_details['payment'];
+      $order_id = $konnect_payment['orderId'];
+      $remote_status = $konnect_payment['status'];
+
+      $order_storage = $this->entityTypeManager->getStorage('commerce_order');
+      /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
+      $order = $order_storage->load($order_id);
+
+      if (!$order) {
+        throw new PaymentGatewayException("Order $order_id not found.");
+      }
+
+      if ($remote_status === 'completed') {
+        $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
+        $payments = $payment_storage->loadByProperties(['remote_id' => $payment_ref]);
+        $payment = reset($payments);
+
+        if (!$payment) {
+          $payment = $payment_storage->create([
+            'state' => 'completed',
+            'amount' => $order->getTotalPrice(),
+            'payment_gateway' => $this->entityId,
+            'order_id' => $order->id(),
+            'remote_id' => $payment_ref,
+            'remote_state' => $remote_status,
+          ]);
+        }
+        else {
+          $payment->setState('completed');
+        }
+
+        $payment->save();
+        $this->logger->info('Order @id marked as paid via Webhook.', ['@id' => $order_id]);
+      }
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Webhook error: @message', ['@message' => $e->getMessage()]);
+      return new Response('Error processing webhook', 500);
+    }
+
+    return new Response('OK');
+  }
+
+  /**
    * Performs an API call to Konnect using x-api-key authentication.
    */
   public function apiCall($method, $endpoint, $data = []) {
@@ -139,6 +250,4 @@ class Konnect extends OffsitePaymentGatewayBase {
     $response = $this->httpClient->request($method, $url, $options);
     return json_decode($response->getBody()->getContents(), TRUE);
   }
-
-  // ... Gardez vos méthodes onReturn() et onNotify() telles quelles
 }

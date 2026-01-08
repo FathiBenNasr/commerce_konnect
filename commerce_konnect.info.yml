@@ -1,16 +1,30 @@
 name: 'Commerce Konnect'
 type: module
-description: 'Integrates the Konnect Tunisia payment gateway (Bank Cards, E-Dinar, Flouci) with Drupal Commerce.'
+description: 'Provides Konnect Tunisia payment gateway integration for Drupal Commerce. Supports Bank Cards, e-Dinar, wallets, and Flouci.'
 package: 'Commerce (Tunisia)'
-
-# Version locale pour le suivi
-version: '1.1.8'
 core_version_requirement: ^9.4 || ^10 || ^11
-
-configure: entity.commerce_payment_gateway.collection
-
 dependencies:
   - commerce:commerce_payment
   - commerce:commerce_order
+  - commerce:commerce_price
 
-license: 'GPL-2.0-or-later'
+# Drupal.org project information
+project: 'commerce_konnect'
+datestamp: 1736294400
+version: '1.1.9'
+
+configure: entity.commerce_payment_gateway.collection
+
+# Author information
+author: 'Fathi BEN NASR'
+homepage: 'https://www.drupal.org/project/commerce_konnect'
+support: 'https://www.drupal.org/project/issues/commerce_konnect'
+
+# Keywords for Drupal.org search
+keywords:
+  - 'payment gateway'
+  - 'konnect'
+  - 'tunisia'
+  - 'mena'
+  - 'e-commerce'
+  - 'tnd'
