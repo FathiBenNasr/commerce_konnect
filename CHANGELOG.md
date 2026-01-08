@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.2] - 2026-01-08
+### Fixed
+- **Authentication:** Refactored the API authentication to use the `x-api-key` header instead of Basic Auth with an "API Secret", aligning the module with the official Konnect API documentation.
+- **Architecture:** Resolved a critical `TypeError` by refactoring the plugin to use `parent::create()` for dependency injection, ensuring compatibility with Drupal 10/11.
+- **Cleanup:** Removed the unused and confusing `api_secret` field from the gateway configuration form.
+
+### Added
+- Improved internal logging for API calls to facilitate debugging of payment failures.
+
 ## [1.1.1] - 2026-01-07
 ### Fixed
 - **Critical:** Fixed `ArgumentCountError` in `Konnect.php` by updating the constructor to match Drupal Commerce's requirements for 8 arguments.
@@ -9,7 +18,7 @@
 ### Added
 - Added asynchronous payment notification support (Webhooks).
 - Created `commerce_konnect.routing.yml` to handle the incoming Konnect API notifications.
-- Added an API double-check in the `onNotify` method to verify payment status directly with Konnect servers for enhanced security.
+- Added an API double-check in the `onNotify` method to verify payment status directly with Konnect servers.
 
 ### Security
 - Implemented an ID switching protection check in `onReturn()` to ensure the returned Konnect `orderId` matches the Drupal Order ID.

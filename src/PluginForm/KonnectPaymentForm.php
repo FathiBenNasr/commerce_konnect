@@ -39,16 +39,13 @@ class KonnectPaymentForm extends PaymentOffsiteForm {
       'amount' => $payment->getAmount()->getMinorUnits(),
       'currency' => $payment->getAmount()->getCurrencyCode(),
       'description' => $this->t('Payment for Order #@order_id', ['@order_id' => $order->id()]),
-      'acceptedPaymentMethods' => [
-        'balance',
-        'bank_card',
-        'wallet',
-      ],
+      'acceptedPaymentMethods' => ['balance', 'bank_card', 'wallet'],
       'sendEmail' => !empty($config['send_email']),
       'email' => $order->getEmail(),
-      'firstName' => $first_name ?: 'Customer',
-      'lastName' => $last_name ?: $order->id(),
-      'orderId' => $order->id(),
+      // S'assurer que firstName et lastName ne sont jamais vides pour l'API Konnect.
+      'firstName' => substr($first_name ?: 'Customer', 0, 25), 
+      'lastName' => substr($last_name ?: $order->id(), 0, 25),
+      'orderId' => (string) $order->id(), // Forcer en string pour la cohérence.
       'successUrl' => $form['#return_url'],
       'failUrl' => $form['#cancel_url'],
     ];
