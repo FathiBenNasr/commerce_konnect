@@ -4,7 +4,7 @@ description: 'Integrates the Konnect Tunisia payment gateway (Bank Cards, E-Dina
 package: 'Commerce (Tunisia)'
 
 # Version locale pour le suivi
-version: '1.1.4'
+version: '1.1.6'
 core_version_requirement: ^9.4 || ^10 || ^11
 
 configure: entity.commerce_payment_gateway.collection
