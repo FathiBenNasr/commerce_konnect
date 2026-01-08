@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.5] - 2026-01-08
+### Fixed
+- **API Endpoints:** Corrected the sandbox URL from `preprod` to `sandbox.konnect.network` to resolve 404 errors during payment initiation.
+- **Environment Alignment:** Ensured test mode keys are correctly validated against the official Konnect Sandbox environment.
+
 ## [1.1.4] - 2026-01-08
 ### Added
 - **Dynamic Currency Logic:** Implemented automatic fraction digit detection (e.g., 3 decimals for TND, 2 for EUR) for cross-border payment accuracy.

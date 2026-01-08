@@ -80,7 +80,7 @@ class Konnect extends OffsitePaymentGatewayBase {
       '#title' => $this->t('API Environment'),
       '#options' => [
         'https://api.konnect.network/api/v2' => $this->t('Live'),
-        'https://api.preprod.konnect.network/api/v2' => $this->t('Sandbox'),
+        'https://api.sandbox.konnect.network/api/v2' => $this->t('Sandbox'),
       ],
       '#default_value' => $this->configuration['api_url'],
     ];
