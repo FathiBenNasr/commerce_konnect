@@ -3,10 +3,11 @@ type: module
 description: 'Integrates the Konnect Tunisia payment gateway (Bank Cards, E-Dinar, Flouci) with Drupal Commerce.'
 package: 'Commerce (Tunisia)'
 
-configure: entity.commerce_payment_gateway.collection
-
-# Cette ligne est cruciale pour supporter Drupal 10 et 11 avec votre nouveau code
+# Version locale pour le suivi
+version: '1.1.4'
 core_version_requirement: ^9.4 || ^10 || ^11
+
+configure: entity.commerce_payment_gateway.collection
 
 dependencies:
   - commerce:commerce_payment

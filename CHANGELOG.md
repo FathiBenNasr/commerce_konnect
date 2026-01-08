@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.4] - 2026-01-08
+### Added
+- **Dynamic Currency Logic:** Implemented automatic fraction digit detection (e.g., 3 decimals for TND, 2 for EUR) for cross-border payment accuracy.
+
+### Fixed
+- **Critical Engine Fix:** Resolved `Call to undefined method Price::getMinorUnits()` by implementing minor unit calculation.
+
 ## [1.1.3] - 2026-01-08
 ### Fixed
 - **Authentication:** Refactored the API authentication to use the `x-api-key` header instead of Basic Auth with an "API Secret", aligning the module with the official Konnect API documentation.

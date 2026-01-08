@@ -11,6 +11,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use GuzzleHttp\Exception\RequestException;
 use Drupal\commerce_order\Entity\OrderInterface;
+use Drupal\Core\Url;
 
 /**
  * Provides the Konnect payment gateway.
@@ -62,6 +63,9 @@ class Konnect extends OffsitePaymentGatewayBase {
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
     $form = parent::buildConfigurationForm($form, $form_state);
+	
+	// Génération dynamique du FQDN + la route du Webhook
+	$generated_webhook_url = Url::fromRoute('commerce_konnect.webhook', [], ['absolute' => TRUE])->toString();
 
     $form['api_key'] = [
       '#type' => 'textfield',
@@ -89,11 +93,12 @@ class Konnect extends OffsitePaymentGatewayBase {
     ];
 
     $form['webhook_url'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Webhook URL'),
-      '#description' => $this->t('The URL for asynchronous notifications (e.g., https://your-site.com/payment/notify/konnect).'),
-      '#default_value' => $this->configuration['webhook_url'],
-    ];
+    '#type' => 'textfield',
+    '#title' => $this->t('Webhook URL'),
+    '#description' => $this->t('The URL for asynchronous notifications (e.g., https://your-site.com/payment/notify/konnect). Copy this URL to your Konnect Dashboard. It was generated automatically based on your current domain.'),
+    '#default_value' => $this->configuration['webhook_url'] ?: $generated_webhook_url,
+    '#attributes' => ['readonly' => 'readonly'], // Optionnel : empêcher la modification manuelle
+  ];
 
     return $form;
   }

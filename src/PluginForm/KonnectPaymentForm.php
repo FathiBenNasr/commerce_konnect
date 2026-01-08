@@ -6,6 +6,7 @@ use Drupal\commerce_payment\PluginForm\PaymentOffsiteForm;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\commerce_payment\Exception\PaymentGatewayException;
 use Drupal\commerce_order\Entity\OrderInterface;
+use Drupal\commerce_price\Entity\Currency;
 
 /**
  * Provides the Konnect payment form.
@@ -32,23 +33,33 @@ class KonnectPaymentForm extends PaymentOffsiteForm {
 	// Extracting customer name with fallbacks
 	$first_name = $address ? $address->getGivenName() : $order->getCustomer()->getDisplayName();
 	$last_name = $address ? $address->getFamilyName() : '';
+	
+	// Get the amount and currency code.
+	$amount_object = $payment->getAmount();
+	$currency_code = $amount_object->getCurrencyCode();
+	
+	// Load the currency entity to find out how many decimals it has.
+	$currency = Currency::load($currency_code);
+	$fraction_digits = $currency->getFractionDigits(); // Returns 3 for TND, 2 for USD, 0 for JPY.
+	
+	// Calculate the integer amount (minor units) dynamically.
+	$minor_units = (int) round($amount_object->getNumber() * pow(10, $fraction_digits));
 
     // Prepare the data for the Konnect API to create a payment.
     $data = [
-      'receiverWalletId' => $config['receiver_wallet_id'],
-      'amount' => $payment->getAmount()->getMinorUnits(),
-      'currency' => $payment->getAmount()->getCurrencyCode(),
-      'description' => $this->t('Payment for Order #@order_id', ['@order_id' => $order->id()]),
-      'acceptedPaymentMethods' => ['balance', 'bank_card', 'wallet'],
-      'sendEmail' => !empty($config['send_email']),
-      'email' => $order->getEmail(),
-      // S'assurer que firstName et lastName ne sont jamais vides pour l'API Konnect.
-      'firstName' => substr($first_name ?: 'Customer', 0, 25), 
-      'lastName' => substr($last_name ?: $order->id(), 0, 25),
-      'orderId' => (string) $order->id(), // Forcer en string pour la cohérence.
-      'successUrl' => $form['#return_url'],
-      'failUrl' => $form['#cancel_url'],
-    ];
+	'receiverWalletId' => $config['receiver_wallet_id'],
+	'amount' => $minor_units, // Now correct for any currency!
+	'currency' => $currency_code,
+	'description' => $this->t('Payment for Order #@order_id', ['@order_id' => $order->id()]),
+	'acceptedPaymentMethods' => ['balance', 'bank_card', 'wallet'],
+	'sendEmail' => !empty($config['send_email']),
+	'email' => $order->getEmail(),
+	'firstName' => substr($first_name ?: 'Customer', 0, 25), 
+	'lastName' => substr($last_name ?: $order->id(), 0, 25),
+	'orderId' => (string) $order->id(),
+	'successUrl' => $form['#return_url'],
+	'failUrl' => $form['#cancel_url'],
+	];
 
     // Add webhook URL if configured.
     if (!empty($config['webhook_url'])) {
