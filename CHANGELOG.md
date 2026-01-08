@@ -1,10 +1,10 @@
 # Changelog
 
-## [1.1.2] - 2026-01-08
+## [1.1.3] - 2026-01-08
 ### Fixed
 - **Authentication:** Refactored the API authentication to use the `x-api-key` header instead of Basic Auth with an "API Secret", aligning the module with the official Konnect API documentation.
 - **Architecture:** Resolved a critical `TypeError` by refactoring the plugin to use `parent::create()` for dependency injection, ensuring compatibility with Drupal 10/11.
-- **Cleanup:** Removed the unused and confusing `api_secret` field from the gateway configuration form.
+- **Cleanup:** Removed the unused and confusing `api_secret` field from the gateway configuration form and optimized `KonnectPaymentForm` data handling.
 
 ### Added
 - Improved internal logging for API calls to facilitate debugging of payment failures.
