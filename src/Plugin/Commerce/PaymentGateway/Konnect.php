@@ -63,9 +63,6 @@ class Konnect extends OffsitePaymentGatewayBase {
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
     $form = parent::buildConfigurationForm($form, $form_state);
-	
-	// Génération dynamique du FQDN + la route du Webhook
-	$generated_webhook_url = Url::fromRoute('commerce_konnect.webhook', [], ['absolute' => TRUE])->toString();
 
     $form['api_key'] = [
       '#type' => 'textfield',
@@ -93,12 +90,19 @@ class Konnect extends OffsitePaymentGatewayBase {
     ];
 
     $form['webhook_url'] = [
-    '#type' => 'textfield',
-    '#title' => $this->t('Webhook URL'),
-    '#description' => $this->t('The URL for asynchronous notifications (e.g., https://your-site.com/payment/notify/konnect). Copy this URL to your Konnect Dashboard. It was generated automatically based on your current domain.'),
-    '#default_value' => $this->configuration['webhook_url'] ?: $generated_webhook_url,
-    '#attributes' => ['readonly' => 'readonly'], // Optionnel : empêcher la modification manuelle
-  ];
+	'#type' => 'textfield',
+	'#title' => $this->t('Webhook URL'),
+	'#description' => $this->t('Copy your full site URL followed by /payment/notify/konnect (e.g., https://example.com/payment/notify/konnect)'),
+	'#default_value' => $this->configuration['webhook_url'],
+	'#required' => FALSE, // Laissez l'utilisateur le remplir manuellement pour plus de sécurité
+	];
+	
+	$form['webhook_info'] = [
+	'#type' => 'item',
+	'#title' => $this->t('Webhook Configuration'),
+	'#markup' => $this->t('Please configure your Konnect dashboard to point to: <br><code>/payment/notify/konnect</code>'),
+	'#description' => $this->t('Ensure your site is accessible via a public URL for this to work.'),
+	];
 
     return $form;
   }

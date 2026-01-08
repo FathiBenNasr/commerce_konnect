@@ -1,4 +1,23 @@
-# Changelog
+## [1.1.8] - 2026-01-08
+
+### Fixed
+- **Critical Stability:** Removed the dynamic call to `Url::fromRoute` in the admin form to prevent `RouteNotFoundException` during installation or cache rebuilds.
+- **Webhook Logic:** Split the webhook configuration into a storage field and a static instruction block for improved reliability.
+- **Metadata:** Updated `commerce_konnect.info.yml` to version 1.1.8.
+
+## [1.1.7] - 2026-01-08
+
+### Fixed
+- **Controller Mapping:** Corrected `commerce_konnect.routing.yml` to use `PaymentGatewayController::notifyPage`. This resolves the `MethodDoesNotExist` exception caused by using the incorrect checkout controller.
+- **Routing Stability:** Verified that the `commerce_konnect.webhook` route is correctly registered in the Drupal RouteProvider after cache rebuild.
+
+## [1.1.6] - 2026-01-08
+
+### Fixed
+- **Webhook Routing:** Rebuilt `commerce_konnect.routing.yml` to utilize the standard `PaymentCheckoutController::notifyPage`. This resolves the `RouteNotFoundException` that occurred in the administration interface.
+- **Admin Form Stability:** Fixed dynamic Webhook URL generation in the plugin configuration form to ensure the FQDN is correctly resolved.
+- **Access Control:** Updated Webhook requirements to `_access: 'TRUE'` to allow asynchronous server-to-server notifications from Konnect.
+- Standardized the notification path to `/payment/notify/konnect`.
 
 ## [1.1.5] - 2026-01-08
 ### Fixed
